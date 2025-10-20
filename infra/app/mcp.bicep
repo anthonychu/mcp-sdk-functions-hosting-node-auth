@@ -47,9 +47,10 @@ var baseAppSettings = {
   AzureWebJobsStorage__credential: 'managedidentity'
   AzureWebJobsStorage__clientId: identityClientId
   
-  // Windows-specific runtime settings (always dotnet-isolated for MCP)
-  FUNCTIONS_WORKER_RUNTIME: 'dotnet-isolated'
+  // Windows-specific runtime settings (Node.js for MCP)
+  FUNCTIONS_WORKER_RUNTIME: 'node'
   FUNCTIONS_EXTENSION_VERSION: '~4'
+  WEBSITE_NODE_DEFAULT_VERSION: '~20'
   WEBSITE_CONTENTAZUREFILECONNECTIONSTRING: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${stg.listKeys().keys[0].value}'
   WEBSITE_CONTENTSHARE: toLower(name)
 }
@@ -113,8 +114,8 @@ module mcp 'br/public:avm/res/web/site:0.15.1' = {
       ]
     }
     siteConfig: {
-      alwaysOn: true // Standard plans support and benefit from Always On
-      netFrameworkVersion: 'v8.0' // For .NET 8
+      alwaysOn: false // Consumption plans do not support Always On
+      nodeVersion: '~20' // For Node.js 20 LTS
       use32BitWorkerProcess: false
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'

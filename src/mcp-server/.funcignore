@@ -1,0 +1,13 @@
+*.js.map
+*.ts
+.vscode
+.git
+build
+coverage
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.gitignore
+.funcignore

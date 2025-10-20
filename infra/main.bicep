@@ -102,15 +102,15 @@ module mcpUserAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned
   }
 }
 
-// Create a Standard App Service Plan for Windows Functions
+// Create a Windows Consumption App Service Plan for Functions
 module appServicePlan 'br/public:avm/res/web/serverfarm:0.1.1' = {
   name: 'appserviceplan'
   scope: rg
   params: {
     name: !empty(appServicePlanName) ? appServicePlanName : '${abbrs.webServerFarms}${resourceToken}'
     sku: {
-      name: 'S1'
-      tier: 'Standard'
+      name: 'Y1'
+      tier: 'Dynamic'
     }
     reserved: false
     location: location

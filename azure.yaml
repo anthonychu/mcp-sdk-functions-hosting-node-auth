@@ -5,6 +5,6 @@ metadata:
   template: functions-mcp-authorization@1.0.1
 services:
   mcp:
-    project: ./src/FunctionsMcpAuthorization/
-    language: dotnet
+    project: ./src/mcp-server/
+    language: ts
     host: function
