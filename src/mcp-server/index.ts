@@ -3,6 +3,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import express, { Request, Response } from 'express';
 import { z } from 'zod';
 import { ManagedIdentityCredential, OnBehalfOfCredential } from '@azure/identity';
+import path from 'path';
 
 // Create an MCP server
 const server = new McpServer({
@@ -93,7 +94,7 @@ server.registerTool(
             console.error('Error during token exchange and Graph API call:', error);
             const errorOutput = {
                 authenticated: false,
-                message: `Error during token exchange and Graph API call. You're logged in but might need to grant consent to the application. Open a browser to the following link to consent: https://${process.env.WEBSITE_HOSTNAME}/.auth/login/aad`
+                message: `Error during token exchange and Graph API call. You're logged in but might need to grant consent to the application. Open a browser to the following link to consent: https://${process.env.WEBSITE_HOSTNAME}/.auth/login/aad?post_login_redirect_uri=https://${process.env.WEBSITE_HOSTNAME}/authcomplete`,
             };
             return {
                 content: [{ type: 'text', text: JSON.stringify(errorOutput, null, 2) }],
@@ -120,6 +121,11 @@ app.post('/mcp', async (req: Request, res: Response) => {
 
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
+});
+
+app.get('/authcomplete', (_req: Request, res: Response) => {
+    const __dirname = path.dirname(new URL(import.meta.url).pathname);
+    res.sendFile(path.join(__dirname, 'authcomplete.html'));
 });
 
 const port = parseInt(process.env.FUNCTIONS_CUSTOMHANDLER_PORT || '3000');

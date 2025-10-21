@@ -2,7 +2,7 @@
   "compilerOptions": {
     // Target and Module
     "target": "ES2022",
-    "module": "commonjs",
+    "module": "es2022",
     "lib": ["ES2022"],
     
     // File Layout
