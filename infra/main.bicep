@@ -124,7 +124,7 @@ module entraApp 'app/entra.bicep' = {
   scope: rg
   params: {
     appUniqueName: '${functionAppName}-app'
-    appDisplayName: 'MCP Authorization App'
+    appDisplayName: 'MCP Authorization App (${functionAppName})'
     serviceManagementReference: serviceManagementReference
     functionAppHostname: '${functionAppName}.azurewebsites.net'
     preAuthorizedClientIds: preAuthorizedClientIdsArray
