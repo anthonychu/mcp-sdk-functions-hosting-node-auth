@@ -1,7 +1,8 @@
-import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express, { Request, Response } from 'express';
 import { z } from 'zod';
+import { ManagedIdentityCredential, OnBehalfOfCredential } from '@azure/identity';
 
 // Create an MCP server
 const server = new McpServer({
@@ -27,35 +28,24 @@ server.registerTool(
     }
 );
 
-// Add a tool to get current user info from Azure App Service authentication headers
+// Add Get Current User tool using On-Behalf-Of flow with Azure App Service authentication
 server.registerTool(
     'get_current_user',
     {
         title: 'Get Current User',
-        description: 'Get current logged-in user information from Azure App Service authentication headers',
+        description: 'Get current logged-in user information from Microsoft Graph using Azure App Service authentication headers and On-Behalf-Of flow',
         inputSchema: {},
         outputSchema: {
             authenticated: z.boolean(),
-            user: z.object({
-                id: z.string().optional(),
-                name: z.string().optional(),
-                identityProvider: z.string().optional(),
-                authType: z.string().optional(),
-                nameType: z.string().optional(),
-                roleType: z.string().optional(),
-                claims: z.array(z.object({
-                    type: z.string(),
-                    value: z.string()
-                })).optional()
-            }).optional()
+            user: z.object({}).optional(),
+            message: z.string().optional()
         }
     },
     async (_, extra) => {
         const headers = extra?.requestInfo?.headers;
-        // console.log('Request headers:', headers);
-        
+
         if (!headers) {
-            const output = { authenticated: false };
+            const output = { authenticated: false, message: 'No authentication headers found' };
             return {
                 content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
                 structuredContent: output
@@ -72,70 +62,53 @@ server.registerTool(
             }
         }
 
-        const clientPrincipalHeader = normalizedHeaders['x-ms-client-principal'];
-        const clientPrincipalId = normalizedHeaders['x-ms-client-principal-id'];
-        const clientPrincipalName = normalizedHeaders['x-ms-client-principal-name'];
-        const clientPrincipalIdp = normalizedHeaders['x-ms-client-principal-idp'];
+        // the client principal info can also be accessed in these headers
+        // const clientPrincipalHeader = normalizedHeaders['x-ms-client-principal'];
+        // const clientPrincipalId = normalizedHeaders['x-ms-client-principal-id'];
+        // const clientPrincipalName = normalizedHeaders['x-ms-client-principal-name'];
+        // const clientPrincipalIdp = normalizedHeaders['x-ms-client-principal-idp'];
 
-        // If no authentication headers are present, return anonymous
-        if (!clientPrincipalHeader && !clientPrincipalId && !clientPrincipalName && !clientPrincipalIdp) {
-            const output = { authenticated: false };
+        try {
+            // get the auth token from Authorization header
+            const authToken = (headers['authorization'] as string).split(' ')[1];
+
+            const tokenExchangeAudience = process.env.TokenExchangeAudience ?? "api://AzureADTokenExchange";
+            const publicTokenExchangeScope = `${tokenExchangeAudience}/.default`;
+            const federatedCredentialClientId = process.env.OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID;
+            const clientId = process.env.WEBSITE_AUTH_CLIENT_ID;
+
+            const managedIdentityCredential = new ManagedIdentityCredential(federatedCredentialClientId!);
+
+            const oboCredential = new OnBehalfOfCredential({
+                tenantId: process.env.WEBSITE_AUTH_AAD_ALLOWED_TENANTS!,
+                clientId: clientId!,
+                userAssertionToken: authToken!,
+                getAssertion: async () => (await managedIdentityCredential.getToken(publicTokenExchangeScope)).token
+            });
+
+            const graphResponse = await fetch('https://graph.microsoft.com/v1.0/me', {
+                headers: {
+                    'Authorization': `Bearer ${(await oboCredential.getToken('https://graph.microsoft.com/.default'))?.token}`
+                }
+            });
+            const graphData = await graphResponse.json();
+            const output = { authenticated: true, user: graphData, message: 'Successfully retrieved user information from Microsoft Graph' };
             return {
                 content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
                 structuredContent: output
             };
+        } catch (error) {
+            console.error('Error during token exchange and Graph API call:', error);
+            const errorOutput = {
+                authenticated: false,
+                message: `Error during token exchange and Graph API call. You're logged in but might need to grant consent to the MCP server. Open a browser to the following link: https://${process.env.WEBSITE_HOSTNAME}/.auth/login/aad`
+            };
+            return {
+                content: [{ type: 'text', text: JSON.stringify(errorOutput, null, 2) }],
+                structuredContent: errorOutput
+            };
         }
-
-        let decodedPrincipal = null;
-        if (clientPrincipalHeader) {
-            try {
-                // Decode the Base64-encoded JSON
-                const decoded = Buffer.from(clientPrincipalHeader, 'base64').toString('utf-8');
-                decodedPrincipal = JSON.parse(decoded);
-            } catch (error) {
-                console.error('Failed to decode client principal header:', error);
-            }
-        }
-
-        const user = {
-            id: clientPrincipalId || decodedPrincipal?.name_typ || undefined,
-            name: clientPrincipalName || decodedPrincipal?.claims?.find((c: any) => c.typ === 'name')?.val || undefined,
-            identityProvider: clientPrincipalIdp || decodedPrincipal?.auth_typ || undefined,
-            authType: decodedPrincipal?.auth_typ || undefined,
-            nameType: decodedPrincipal?.name_typ || undefined,
-            roleType: decodedPrincipal?.role_typ || undefined,
-            claims: decodedPrincipal?.claims?.map((claim: any) => ({
-                type: claim.typ,
-                value: claim.val
-            })) || undefined
-        };
-
-        const output = { authenticated: true, user };
-        return {
-            content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-            structuredContent: output
-        };
     }
-);
-
-
-
-// Add a dynamic greeting resource
-server.registerResource(
-    'greeting',
-    new ResourceTemplate('greeting://{name}', { list: undefined }),
-    {
-        title: 'Greeting Resource', // Display name for UI
-        description: 'Dynamic greeting generator'
-    },
-    async (uri, { name }) => ({
-        contents: [
-            {
-                uri: uri.href,
-                text: `Hello, ${name}!`
-            }
-        ]
-    })
 );
 
 // Set up Express and HTTP transport

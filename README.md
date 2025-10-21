@@ -1,8 +1,8 @@
-# Sample: MCP server authorization with Azure Functions
+# Sample: Self-hosted MCP server authorization with Azure Functions
 
-This sample shows how to use App Service Authentication and Authorization for Model Context Protocol (MCP) server authorization. The MCP server is implemented using the Azure Functions MCP Extension. The sample also shows how to call the Microsoft Graph on behalf of the signed-in user.
+This sample shows how to use App Service Authentication and Authorization for Model Context Protocol (MCP) server authorization. The MCP server is implemented using the Azure Functions MCP Extension with TypeScript/Node.js. The sample also shows how to call the Microsoft Graph on behalf of the signed-in user.
 
-The sample uses a .NET project. There are two ways to get started:
+The sample uses a TypeScript project. There are two ways to get started:
 
 - [You can deploy the application to Azure using the Azure Developer CLI (azd)](#get-started-deploy-to-azure-with-azd) - this is the recommended way to get started with the sample.
 - [You can run the application locally](#get-started-run-locally) - this option does not use any MCP server authorization. Instead of using the identity of the authorized user, it uses your developer credentials for outbound calls to the Microsoft Graph. The option is covered for completeness and to show how you might build your own applications to work locally, but it is not the core focus of the sample.
@@ -14,8 +14,8 @@ You can run it locally or quickly deploy it to Azure using the Azure Developer C
 - An Azure subscription - [Create an Azure free account](https://azure.microsoft.com/free/)
 - Azure CLI - [Install the Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)
 - Azure Developer CLI (azd) - [Install the Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd?tabs=azure-cli)
-- Azure Functions Core Tools - [Install the Azure Functions Core Tools](https://learn.microsoft.com/azure/azure-functions/functions-run-local?pivots=programming-language-csharp#install-the-azure-functions-core-tools)
-- .NET SDK 8.0 or later - [Install the .NET SDK](https://dotnet.microsoft.com/download/dotnet/)
+- Azure Functions Core Tools - [Install the Azure Functions Core Tools](https://learn.microsoft.com/azure/azure-functions/functions-run-local?pivots=programming-language-typescript#install-the-azure-functions-core-tools)
+- Node.js 20 LTS or later - [Install Node.js](https://nodejs.org/)
 - Visual Studio Code - [Install Visual Studio Code](https://code.visualstudio.com/download)
 - Azurite - [Install Azurite](https://learn.microsoft.com/azure/storage/common/storage-install-azurite)
 
@@ -129,7 +129,7 @@ You must also have an Entra client ID that can be used by your MCP client. For b
 
 1. Clone this repository.
 
-1. (Optional) Update the `local.settings.json` file in the `src/FunctionsMcpAuthorization` folder to include your Microsoft Entra tenant ID. This helps the application correctly access your developer identity, even when you can sign into multiple tenants.
+1. (Optional) Update the `local.settings.json` file in the `src/mcp-server` folder to include your Microsoft Entra tenant ID. This helps the application correctly access your developer identity, even when you can sign into multiple tenants.
 
     1. Obtain the tenant ID from the Azure CLI:
 
@@ -144,7 +144,7 @@ You must also have an Entra client ID that can be used by your MCP client. For b
           "IsEncrypted": false,
           "Values": {
             "AzureWebJobsStorage": "UseDevelopmentStorage=true",
-            "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+            "FUNCTIONS_WORKER_RUNTIME": "node",
             "AZURE_TENANT_ID": "<your-tenant-id>"
           }
         }
@@ -152,12 +152,18 @@ You must also have an Entra client ID that can be used by your MCP client. For b
 
 1. Start Azurite. If you are using the CLI to start it up, with an `azurite` or a `docker run` command, for example, do so in a separate background terminal.
 
-1. Move your main terminal to the `src/FunctionsMcpAuthorization` folder.
+1. Move your main terminal to the `src/mcp-server` folder.
+
+1. Install dependencies:
+
+    ```cli
+    npm install
+    ```
 
 1. Start the project:
 
-    ```dotnetcli
-    dotnet run
+    ```cli
+    npm start
     ```
 
 1. Test your MCP server by following the instructions in the [Test your MCP server](#test-your-mcp-server) section below.
@@ -237,15 +243,11 @@ The instructions provided below are for testing with GitHub Copilot in Visual St
 
 ### Code structure
 
-The code for the MCP server is in the `src/FunctionsMcpAuthorization` project folder. This is an Azure Functions project that uses the MCP Extension for Azure Functions, defining one tool in `HelloTool.cs`. The goal of this function is to call the Microsoft Graph and return simple greeting. When hosted in Azure, it will call the Graph on behalf of the signed-in user for the request. When run locally, it will use your developer credentials.
+The code for the MCP server is in the `src/mcp-server` project folder. This is an Azure Functions project using TypeScript with Node.js that uses the MCP Extension for Azure Functions and a custom handler. The MCP handler is defined in `mcp-handler/function.json` and implements one tool in `index.ts`. The goal of this function is to call the Microsoft Graph and return a simple greeting. When hosted in Azure, it will call the Graph on behalf of the signed-in user for the request. When run locally, it will use your developer credentials.
 
-To meet these requirements, the function class uses dependency injection to obtain a token for the correct user. The `Program.cs` file registers a scoped service for this purpose. The service is scoped because each request may be for a different user, so we need to create a new instance for each request.
+To meet these requirements, the handler uses the `@azure/identity` package to obtain a token for the correct user. The `index.ts` file configures an appropriate `TokenCredential` instance based on the context. In local contexts, this is a simple `ChainedTokenCredential`. However, when hosted in Azure with App Service Authentication and Authorization, the handler uses the MCP tool trigger's `ToolInvocationContext` to access the headers from the underlying HTTP transport. It uses these headers to craft a custom token credential implementation. This implementation uses the `OnBehalfOfCredential`, authenticating as the app registration using a managed identity as a federated identity credential, which was set up during provisioning.
 
-The Program.cs file also registers a function middleware for MCP triggers. This middleware is what identifies the user context and configures the scoped service with the appropriate `Azure.Core.TokenCredential` instance. In local contexts, this is a simple `ChainedTokenCredential`. However, when hosted in Azure with App Service Authentication and Authorization, the middleware uses the MCP tool trigger's `ToolInvocationContext` to access the headers from the underlying HTTP transport. It uses these headers to craft a custom `TokenCredential` implementation. This implementation uses the `OnBehalfOfCredential`, authenticating as the app registration using a managed identity as a federated identity credential, which was set up during provisioning.
-
-The approach of using a scoped service and a function middleware is convenient for configuring per-request dependencies like user context. It also keeps the tool implementation simple and focused on its core purpose, without introducing any extra identity code. This also allows the same setup to be used across multiple tools if needed. The service, middleware, custom credential, and supporting helpers are all found within the `McpOutboundCredential` folder.
-
-It is worth noting that the local development setup is made simple because the sample application only needs the `User.Read` permission for the Microsoft Graph. This is one of the permissions that is requested by default with the Graph. If additional, specific permissions were needed, the app would need to obtain a token that includes the correct permission claims. The correct way to do this would be to leverage a custom client registration for development time, mirroring the app registration used in the full Azure deployment. Accommodating this is outside the scope of this sample, but it is something to consider when building your own applications.
+The approach of using a custom handler with the @azure/identity package keeps the tool implementation simple and focused on its core purpose, without introducing unnecessary complexity. It also allows the same setup to be used across multiple tools if needed.
 
 ### Consent authoring
 
