@@ -49,7 +49,7 @@ param tokenExchangeAudience string = ''
   // 'uaenorth'
   // 'uksouth'
   // 'ukwest'
-  'westcentralus'
+  // 'westcentralus' // (no app insights here)
   // 'westeurope'
   // 'westus'
   'westus2'

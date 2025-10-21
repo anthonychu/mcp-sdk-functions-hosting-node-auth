@@ -124,8 +124,10 @@ app.post('/mcp', async (req: Request, res: Response) => {
 });
 
 app.get('/authcomplete', (_req: Request, res: Response) => {
-    const __dirname = path.dirname(new URL(import.meta.url).pathname);
-    res.sendFile(path.join(__dirname, 'authcomplete.html'));
+    const fileUrl = new URL(import.meta.url);
+    const __dirname = path.dirname(fileUrl.pathname.replace(/^\/([a-zA-Z]:)/, '$1'));
+    const filePath = path.resolve(__dirname, '..', 'authcomplete.html');
+    res.sendFile(filePath);
 });
 
 const port = parseInt(process.env.FUNCTIONS_CUSTOMHANDLER_PORT || '3000');

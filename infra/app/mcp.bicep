@@ -53,6 +53,9 @@ var baseAppSettings = {
   WEBSITE_NODE_DEFAULT_VERSION: '~20'
   WEBSITE_CONTENTAZUREFILECONNECTIONSTRING: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${stg.listKeys().keys[0].value}'
   WEBSITE_CONTENTSHARE: toLower(name)
+  
+  // Enable running from package for faster cold starts
+  WEBSITE_RUN_FROM_PACKAGE: '1'
 }
 
 // Application Insights settings (when available)
