@@ -52,24 +52,14 @@ server.registerTool(
             };
         }
 
-        // Convert headers to lowercase for case-insensitive lookup
-        const normalizedHeaders: Record<string, string> = {};
-        for (const [key, value] of Object.entries(headers)) {
-            if (typeof value === 'string') {
-                normalizedHeaders[key.toLowerCase()] = value;
-            } else if (Array.isArray(value) && value.length > 0) {
-                normalizedHeaders[key.toLowerCase()] = value[0];
-            }
-        }
-
         // the client principal info can also be accessed in these headers
-        // const clientPrincipalHeader = normalizedHeaders['x-ms-client-principal'];
-        // const clientPrincipalId = normalizedHeaders['x-ms-client-principal-id'];
-        // const clientPrincipalName = normalizedHeaders['x-ms-client-principal-name'];
-        // const clientPrincipalIdp = normalizedHeaders['x-ms-client-principal-idp'];
+        // const clientPrincipalHeader = headers['x-ms-client-principal'];
+        // const clientPrincipalId = headers['x-ms-client-principal-id'];
+        // const clientPrincipalName = headers['x-ms-client-principal-name'];
+        // const clientPrincipalIdp = headers['x-ms-client-principal-idp'];
 
         try {
-            // get the auth token from Authorization header
+            // get the auth token from Authorization header and remove the "Bearer " prefix
             const authToken = (headers['authorization'] as string).split(' ')[1];
 
             const tokenExchangeAudience = process.env.TokenExchangeAudience ?? "api://AzureADTokenExchange";
@@ -86,6 +76,7 @@ server.registerTool(
                 getAssertion: async () => (await managedIdentityCredential.getToken(publicTokenExchangeScope)).token
             });
 
+            // Call Microsoft Graph API to get user information
             const graphResponse = await fetch('https://graph.microsoft.com/v1.0/me', {
                 headers: {
                     'Authorization': `Bearer ${(await oboCredential.getToken('https://graph.microsoft.com/.default'))?.token}`
@@ -97,11 +88,12 @@ server.registerTool(
                 content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
                 structuredContent: output
             };
+
         } catch (error) {
             console.error('Error during token exchange and Graph API call:', error);
             const errorOutput = {
                 authenticated: false,
-                message: `Error during token exchange and Graph API call. You're logged in but might need to grant consent to the MCP server. Open a browser to the following link: https://${process.env.WEBSITE_HOSTNAME}/.auth/login/aad`
+                message: `Error during token exchange and Graph API call. You're logged in but might need to grant consent to the application. Open a browser to the following link to consent: https://${process.env.WEBSITE_HOSTNAME}/.auth/login/aad`
             };
             return {
                 content: [{ type: 'text', text: JSON.stringify(errorOutput, null, 2) }],
