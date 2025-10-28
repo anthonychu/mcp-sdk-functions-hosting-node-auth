@@ -84,7 +84,17 @@ server.registerTool(
                 }
             });
             const graphData = await graphResponse.json();
-            const output = { authenticated: true, user: graphData, message: 'Successfully retrieved user information from Microsoft Graph' };
+            
+            // Mask sensitive information (for demo purposes)
+            const maskedUserData = { ...graphData as any };
+            if (maskedUserData.businessPhones) {
+                maskedUserData.businessPhones = maskedUserData.businessPhones.map(() => '[MASKED]');
+            }
+            if (maskedUserData.id) {
+                maskedUserData.id = '[MASKED]';
+            }
+            
+            const output = { authenticated: true, user: maskedUserData, message: 'Successfully retrieved user information from Microsoft Graph' };
             return {
                 content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
                 structuredContent: output
